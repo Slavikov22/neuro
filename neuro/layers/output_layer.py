@@ -1,5 +1,5 @@
 from neuro.layers.layer import Layer
 
 
-class InputLayer(Layer):
+class OutputLayer(Layer):
     pass
