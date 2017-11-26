@@ -1,10 +1,13 @@
 import numpy as np
+import math
 
 
 class Neural:
     def __init__(self):
         self.layers = []
         self.weights = []
+        self.step = 0.01
+        self.eps = 0.000001
 
     def add_layer(self, layer):
         self.layers.append(layer)
@@ -12,27 +15,41 @@ class Neural:
     def train(self, train_set):
         self.init_weight()
 
+        e = 0
         for (x, y) in train_set:
-            self.correct(x, y)
+            new_e = 1
+            while math.fabs(new_e - e) > self.eps:
+                new_e = self.correct(x, y)
+                print('Error: ' + str(new_e) + '   Diff: ' + str(e - new_e))
+            e = new_e
 
-    def correct(self, x, y):
+    def correct(self, x, y0):
+        y = np.copy(x)
+        self.layers[0].s = np.copy(y)
+        self.layers[0].y = np.copy(y)
+
         # Прямое распространение
-        for num_layer in range(len(self.layers) - 1):
-            x = self.weights[num_layer].dot(x)
-            x = np.vectorize(self.layers[num_layer].activate_func)(x)
+        for num_layer in range(1, len(self.layers)):
+            y = self.weights[num_layer - 1].T.dot(y)  # Высчитываем Si
+            self.layers[num_layer].s = np.copy(y)
+            y = np.vectorize(self.layers[num_layer].activate_func)(y)  # Высчитываем Yi
+            self.layers[num_layer].y = np.copy(y)
 
-        e = np.sqrt(np.power(y - x, 2))  # Вектор ошибки
+        # Метод градиентного спуска
+        sigma = (self.layers[-1].y - y0) * self.layers[-1].y * (1 - self.layers[-1].y)
+        for num_layer in reversed(range(0, len(self.layers) - 1)):
+            delta_w = -self.step * np.outer(self.layers[num_layer].y, sigma)
+            self.weights[num_layer] += delta_w
+            sigma = np.sum((sigma * self.weights[num_layer]), axis=1) \
+                    * self.layers[num_layer].y * (1 - self.layers[num_layer].y)  # dYi/dSj
 
-        # Обратное распространение ошибки
-        for num_layer in reversed(range(len(self.layers) - 1)):
-            e = self.weights[num_layer].transpose().dot(e)
+        e = 0.5 * np.sqrt(np.power(y - y0, 2)).sum()
+        return e
 
     def init_weight(self):
         self.weights = []
-        self.weights.append(np.array([0.9, 0.3, 0.4, 0.2, 0.8, 0.2, 0.1, 0.5, 0.6]).reshape((3, 3)))
-        self.weights.append(np.array([0.3, 0.7, 0.5, 0.6, 0.5, 0.2, 0.8, 0.1, 0.9]).reshape((3, 3)))
 
-        # for num_layer in range(len(self.layers) - 1):
-        #     rows = self.layers[num_layer + 1].num_neurons
-        #     columns = self.layers[num_layer].num_neurons
-        #     self.weights.append(np.random.sample((rows, columns)))
+        for num_layer in range(len(self.layers) - 1):
+            rows = self.layers[num_layer].num_neurons
+            columns = self.layers[num_layer + 1].num_neurons
+            self.weights.append(np.random.sample((rows, columns)))
