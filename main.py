@@ -1,5 +1,6 @@
 import os.path
 import numpy as np
+import sys
 
 from mnist import MNIST
 from neuro.neural import Neural
@@ -14,13 +15,23 @@ def main():
     mndata.load_training()
     mndata.load_testing()
 
-    neural = Neural()
-    neural.add_layer(InputLayer(num_neurons=3, activate_func=logistic))
-    neural.add_layer(HiddenLayer(num_neurons=3, activate_func=logistic))
-    neural.add_layer(OutputLayer(num_neurons=3, activate_func=logistic))
+    train_labels = list(mndata.train_labels)
 
-    train_set = [(np.array([0.9, 0.1, 0.8]), np.array([0.5, 0.1, 0.2]))]
-    neural.train(train_set=train_set)
+    train_set = []
+    for num in range(len(mndata.train_images)):
+        x = np.array(mndata.train_images[num]) / 256.
+        y = np.zeros((10, ))
+        y[train_labels[num]] = 1
+        train_set.append((x, y))
+
+    neural = Neural(offset_neuron=False)
+    neural.add_layer(InputLayer(num_neurons=784, activate_func=logistic))
+    neural.add_layer(HiddenLayer(num_neurons=800, activate_func=logistic))
+    neural.add_layer(OutputLayer(num_neurons=10, activate_func=logistic))
+
+    neural.train(train_set=train_set[:1000], test_set_len=100, epoch_count=400)
+
+    print(neural.weights)
 
 
 if __name__ == '__main__':

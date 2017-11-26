@@ -7,4 +7,3 @@ class Layer:
         self.activate_func = activate_func
 
         self.y = None
-        self.s = None
