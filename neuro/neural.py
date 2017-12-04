@@ -1,97 +1,139 @@
-import numpy as np
-import math
 import random
+
+import numpy as np
+
+from neuro.helpers.matrix_helper import get_random_matrix
 
 
 class Neural:
     def __init__(self, offset_neuron=False):
         self.offset_neuron = offset_neuron
-
         self.layers = []
-        self.weights = []
-        self.delta_w = []
-        self.train_set = []
-        self.test_set = []
-        self.step = 0.01
-        self.moment = 0.05
+        self.step = 0.00001
+        self.error_func = None
 
-    def train(self, train_set, test_set_len=0, epoch_count=1):
+    ''' Тренировать нейросеть'''
+    def train(self, train_set, test_set, epoch_count=1, batch_size=1):
         self.init_weight()
 
-        self.test_set = train_set[:test_set_len]
-        self.train_set = train_set[test_set_len:]
-
         for epoch_num in range(epoch_count):
-            random.shuffle(self.train_set)
-            for (x, y) in self.train_set:
-                self.correct(x, y)
+            cur_train_set = train_set[:]
+            random.shuffle(cur_train_set)
 
-            print('Epoch {0}: {1}'.format(epoch_num, self.get_test_set_error()))
+            while len(cur_train_set) > 0:
+                cur_batch_size = min(batch_size, len(cur_train_set))
+                self.correct_weights(cur_train_set[:cur_batch_size])
+                cur_train_set = cur_train_set[cur_batch_size:]
+
+            average_error = self.get_average_error(test_set)
+            num_errors = self.get_num_errors(test_set)
+
+            print('Epoch {}:'.format(epoch_num))
+            print(' '*4 + 'Average error: {}'.format(average_error))
+            print(' '*4 + 'Number of errors: {}/{}'.format(num_errors, len(test_set)))
+            print('-'*40)
 
     '''Корректировка весов'''
-    def correct(self, x, y0):
-        self.go_forward(x)
-        self.go_grad_descend(y0)
+    def correct_weights(self, batch):
+        delta_w = [np.zeros(self.layers[num_layer].weights.shape) for num_layer in range(len(self.layers) - 1)]
+
+        for (x, y) in batch:
+            self.go_forward(x)
+            cur_delta_w = self.get_delta_weights(y)
+            for num_layer in range(len(self.layers) - 1):
+                delta_w[num_layer] += cur_delta_w[num_layer]
+
+        for num_layer in range(len(self.layers) - 1):
+            layer = self.layers[num_layer]
+            layer.weights -= delta_w[num_layer]
 
     '''Прямое распространение'''
     def go_forward(self, x):
-        y = np.copy(x)
+        ar = np.copy(x)
 
         if self.offset_neuron:
-            y = np.concatenate(([1], y))
+            ar = np.concatenate(([1], ar))
 
-        self.layers[0].y = np.copy(y)
+        ar = self.layers[0].activate_func.compute(ar)
+        self.layers[0].y = np.copy(ar)
 
         for num_layer in range(1, len(self.layers)):
-            y = self.weights[num_layer - 1].T.dot(y)  # Высчитываем Si
-            y = np.vectorize(self.layers[num_layer].activate_func)(y)  # Высчитываем Yi
+            prev_layer = self.layers[num_layer - 1]
+            layer = self.layers[num_layer]
+
+            ar = prev_layer.weights.T.dot(ar)  # Высчитываем Si
+            ar = layer.activate_func.compute(ar)  # Высчитываем Yi
 
             if self.offset_neuron:
-                y[0] = 1
+                ar[0] = 1
 
-            self.layers[num_layer].y = np.copy(y)
+            layer.y = np.copy(ar)
 
     '''Метод градиентного спуска'''
-    def go_grad_descend(self, y0):
+    def get_delta_weights(self, y0):
+        result = []
+
         if self.offset_neuron:
             y0 = np.concatenate(([1], y0))
 
-        sigma = (self.layers[-1].y - y0) * self.layers[-1].y * (1 - self.layers[-1].y)
+        dEdY = self.error_func.diff(self.layers[-1].y, y0)
+        dYdS = self.layers[-1].activate_func.diff(self.layers[-1].y)
+        sigma = dEdY * dYdS
         for num_layer in reversed(range(0, len(self.layers) - 1)):
-            delta_w = self.step * np.outer(self.layers[num_layer].y, sigma) + self.moment * self.moment * self.delta_w[num_layer]
-            self.weights[num_layer] -= delta_w
-            self.delta_w[num_layer] = delta_w
-            sigma = np.sum((sigma * self.weights[num_layer]), axis=1) \
-                    * self.layers[num_layer].y * (1 - self.layers[num_layer].y)  # dYi/dSj
+            layer = self.layers[num_layer]
+            result.append(self.step * np.outer(layer.y, sigma))
+            dYdS = layer.activate_func.diff(layer.y)
+            sigma = np.sum((sigma * layer.weights), axis=1) * dYdS
 
+        return list(reversed(result))
+
+    ''' Вернуть ответ нейросети '''
+    def get_result(self, x):
+        self.go_forward(x)
+        return self.layers[-1].y
+
+    ''' Вернуть ошибку '''
     def get_error(self, x, y0):
         if self.offset_neuron:
             y0 = np.concatenate(([1], y0))
 
-        self.go_forward(x)
-        return 0.5 * np.sqrt(np.power(self.layers[-1].y - y0, 2)).sum()
+        return self.error_func.get_error(self.get_result(x), y0)
 
-    def get_test_set_error(self):
+    ''' Вернуть количество ошибок в наборе тестов'''
+    def get_num_errors(self, test_set):
+        num_errors = 0
+        for (x, y) in test_set:
+            result = self.get_result(x)
+
+            correct_digit = np.argmax(y)
+            result_digit = np.argmax(result)
+
+            if correct_digit != result_digit:
+                num_errors += 1
+
+        return num_errors
+
+    ''' Вернуть среднюю ошибку по набору тестов'''
+    def get_average_error(self, test_set):
         sum_error = 0
-        for (x, y) in self.test_set:
+        for (x, y) in test_set:
             error = self.get_error(x, y)
             sum_error += error
 
-        return sum_error / len(self.test_set)
+        return sum_error / len(test_set)
 
     def init_weight(self):
-        self.weights = []
-        self.delta_w = []
-
         for num_layer in range(len(self.layers) - 1):
-            rows = self.layers[num_layer].num_neurons
-            columns = self.layers[num_layer + 1].num_neurons
-
-            self.weights.append(np.random.sample((rows, columns)))
-            self.delta_w.append(np.zeros((rows, columns)))
+            layer = self.layers[num_layer]
+            next_layer = self.layers[num_layer + 1]
+            layer.weights = get_random_matrix(
+                shape=(layer.num_neurons, next_layer.num_neurons),
+                center=0.5,
+                max_offset=0.2
+            )
 
             if self.offset_neuron:
-                self.weights[-1][:, 0] = np.zeros((rows, ))
+                layer.weights[:, 0] = np.zeros((layer.num_neurons,))
 
     def add_layer(self, layer):
         if self.offset_neuron:

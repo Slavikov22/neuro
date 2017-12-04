@@ -1,13 +1,15 @@
 import os.path
-import numpy as np
-import sys
+import random
 
+import numpy as np
 from mnist import MNIST
-from neuro.neural import Neural
+
+from neuro.helpers.activate_functions import Logistic, Relu, Softmax, Softplus
+from neuro.helpers.error_functions import MSE, CrossEntropy
+from neuro.layers.hidden_layer import HiddenLayer
 from neuro.layers.input_layer import InputLayer
 from neuro.layers.output_layer import OutputLayer
-from neuro.layers.hidden_layer import HiddenLayer
-from neuro.activate_functions import logistic
+from neuro.neural import Neural
 
 
 def main():
@@ -25,13 +27,12 @@ def main():
         train_set.append((x, y))
 
     neural = Neural(offset_neuron=False)
-    neural.add_layer(InputLayer(num_neurons=784, activate_func=logistic))
-    neural.add_layer(HiddenLayer(num_neurons=800, activate_func=logistic))
-    neural.add_layer(OutputLayer(num_neurons=10, activate_func=logistic))
+    neural.add_layer(InputLayer(num_neurons=784, activate_func=Softplus))
+    neural.add_layer(HiddenLayer(num_neurons=800, activate_func=Softplus))
+    neural.add_layer(OutputLayer(num_neurons=10, activate_func=Softmax))
+    neural.error_func = CrossEntropy
 
-    neural.train(train_set=train_set[:1000], test_set_len=100, epoch_count=400)
-
-    print(neural.weights)
+    neural.train(train_set=train_set[:1], test_set=train_set[:1], batch_size=1, epoch_count=40)
 
 
 if __name__ == '__main__':
