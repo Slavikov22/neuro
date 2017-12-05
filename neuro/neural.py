@@ -1,4 +1,5 @@
 import random
+import sys
 
 import numpy as np
 
@@ -9,12 +10,17 @@ class Neural:
     def __init__(self, offset_neuron=False):
         self.offset_neuron = offset_neuron
         self.layers = []
-        self.step = 0.00001
+        self.step = 0.005
+        self.moment = 0.005
+        self.regress = 0.005
         self.error_func = None
+
+        self.delta_w = []
 
     ''' Тренировать нейросеть'''
     def train(self, train_set, test_set, epoch_count=1, batch_size=1):
         self.init_weight()
+        self.delta_w = [np.zeros(self.layers[num_layer].weights.shape) for num_layer in range(len(self.layers) - 1)]
 
         for epoch_num in range(epoch_count):
             cur_train_set = train_set[:]
@@ -31,21 +37,24 @@ class Neural:
             print('Epoch {}:'.format(epoch_num))
             print(' '*4 + 'Average error: {}'.format(average_error))
             print(' '*4 + 'Number of errors: {}/{}'.format(num_errors, len(test_set)))
+            print(' '*4 + 'Percent of errors: {}%'.format(num_errors / len(test_set) * 100))
             print('-'*40)
 
     '''Корректировка весов'''
     def correct_weights(self, batch):
-        delta_w = [np.zeros(self.layers[num_layer].weights.shape) for num_layer in range(len(self.layers) - 1)]
+        batch_delta_w = [np.zeros(self.layers[num_layer].weights.shape) for num_layer in range(len(self.layers) - 1)]
 
         for (x, y) in batch:
             self.go_forward(x)
             cur_delta_w = self.get_delta_weights(y)
             for num_layer in range(len(self.layers) - 1):
-                delta_w[num_layer] += cur_delta_w[num_layer]
+                batch_delta_w[num_layer] += cur_delta_w[num_layer]
 
         for num_layer in range(len(self.layers) - 1):
             layer = self.layers[num_layer]
-            layer.weights -= delta_w[num_layer]
+            layer.weights -= batch_delta_w[num_layer]
+
+        self.delta_w = batch_delta_w.copy()
 
     '''Прямое распространение'''
     def go_forward(self, x):
@@ -54,7 +63,6 @@ class Neural:
         if self.offset_neuron:
             ar = np.concatenate(([1], ar))
 
-        ar = self.layers[0].activate_func.compute(ar)
         self.layers[0].y = np.copy(ar)
 
         for num_layer in range(1, len(self.layers)):
@@ -71,7 +79,7 @@ class Neural:
 
     '''Метод градиентного спуска'''
     def get_delta_weights(self, y0):
-        result = []
+        delta_weights = []
 
         if self.offset_neuron:
             y0 = np.concatenate(([1], y0))
@@ -81,11 +89,14 @@ class Neural:
         sigma = dEdY * dYdS
         for num_layer in reversed(range(0, len(self.layers) - 1)):
             layer = self.layers[num_layer]
-            result.append(self.step * np.outer(layer.y, sigma))
+            delta_weights.append(
+                self.step * (np.outer(layer.y, sigma) + self.regress * self.layers[num_layer].weights) +
+                self.moment * self.delta_w[num_layer]
+            )
             dYdS = layer.activate_func.diff(layer.y)
             sigma = np.sum((sigma * layer.weights), axis=1) * dYdS
 
-        return list(reversed(result))
+        return list(reversed(delta_weights))
 
     ''' Вернуть ответ нейросети '''
     def get_result(self, x):
@@ -128,8 +139,8 @@ class Neural:
             next_layer = self.layers[num_layer + 1]
             layer.weights = get_random_matrix(
                 shape=(layer.num_neurons, next_layer.num_neurons),
-                center=0.5,
-                max_offset=0.2
+                center=0,
+                max_offset=0.5
             )
 
             if self.offset_neuron:

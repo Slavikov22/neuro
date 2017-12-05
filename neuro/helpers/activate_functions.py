@@ -1,5 +1,6 @@
 import numpy as np
 import math
+import sys
 
 
 class Relu:
@@ -33,7 +34,6 @@ class Softmax:
     def diff(ar):
         s = sum([math.exp(x) for x in ar])
         return [(math.exp(x) / s) * (1 - math.exp(x) / s) for x in ar]
-        # return [x * (1 - x) for x in ar]
 
 
 class Logistic:
