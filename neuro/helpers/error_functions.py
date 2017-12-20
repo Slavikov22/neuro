@@ -1,16 +1,6 @@
 import numpy as np
 
 
-class CrossEntropy:
-    @staticmethod
-    def get_error(y, y0):
-        return -(y0 * np.log(y)).sum()
-
-    @staticmethod
-    def diff(y, y0):
-        return -(y0 / y)
-
-
 class MSE:
     @staticmethod
     def get_error(y, y0):

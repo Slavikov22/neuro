@@ -1,18 +1,15 @@
 import random
-import sys
-
 import numpy as np
 
 from neuro.helpers.matrix_helper import get_random_matrix
 
 
 class Neural:
-    def __init__(self, offset_neuron=False):
-        self.offset_neuron = offset_neuron
+    def __init__(self):
         self.layers = []
-        self.step = 0.005
-        self.moment = 0.005
-        self.regress = 0.005
+        self.step = 0.002
+        self.moment = 0.001
+        self.regress = 0.001
         self.error_func = None
 
         self.delta_w = []
@@ -60,9 +57,6 @@ class Neural:
     def go_forward(self, x):
         ar = np.copy(x)
 
-        if self.offset_neuron:
-            ar = np.concatenate(([1], ar))
-
         self.layers[0].y = np.copy(ar)
 
         for num_layer in range(1, len(self.layers)):
@@ -72,17 +66,11 @@ class Neural:
             ar = prev_layer.weights.T.dot(ar)  # Высчитываем Si
             ar = layer.activate_func.compute(ar)  # Высчитываем Yi
 
-            if self.offset_neuron:
-                ar[0] = 1
-
             layer.y = np.copy(ar)
 
     '''Метод градиентного спуска'''
     def get_delta_weights(self, y0):
         delta_weights = []
-
-        if self.offset_neuron:
-            y0 = np.concatenate(([1], y0))
 
         dEdY = self.error_func.diff(self.layers[-1].y, y0)
         dYdS = self.layers[-1].activate_func.diff(self.layers[-1].y)
@@ -105,9 +93,6 @@ class Neural:
 
     ''' Вернуть ошибку '''
     def get_error(self, x, y0):
-        if self.offset_neuron:
-            y0 = np.concatenate(([1], y0))
-
         return self.error_func.get_error(self.get_result(x), y0)
 
     ''' Вернуть количество ошибок в наборе тестов'''
@@ -143,11 +128,5 @@ class Neural:
                 max_offset=0.5
             )
 
-            if self.offset_neuron:
-                layer.weights[:, 0] = np.zeros((layer.num_neurons,))
-
     def add_layer(self, layer):
-        if self.offset_neuron:
-            layer.num_neurons += 1
-
         self.layers.append(layer)
